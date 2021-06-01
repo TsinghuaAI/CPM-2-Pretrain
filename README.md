@@ -3,6 +3,8 @@
 Pre-train CPM-2 
 **此分支为110亿非 MoE 模型的预训练代码，MoE 模型的预训练代码请切换到 moe 分支**
 
+CPM-2技术报告请参考[link](https://github.com/TsinghuaAI/tsinghuaai.github.io/blob/main/CPM-2.pdf)。
+
 ## 1 安装
 可以直接拉取我们提供的 Docker 环境：
 
