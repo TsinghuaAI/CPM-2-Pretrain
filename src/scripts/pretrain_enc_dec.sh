@@ -13,8 +13,8 @@ CKPT_PATH=""
 SAVE_PATH="${WORKING_DIR}/results/"
 LOG_FILE="${SAVE_PATH}/log.txt"
 DS_CONFIG="${WORKING_DIR}/src/configs/deepspeed/ds_cpm2.json"
-TOKENIZER_PATH="${WORKING_DIR}/bpe_cn_en"
-# TOKENIZER_PATH="${WORKING_DIR}/bpe_cn"
+TOKENIZER_PATH="${WORKING_DIR}/bpe_cn_en"　# 中英混合词表
+# TOKENIZER_PATH="${WORKING_DIR}/bpe_cn" # 中文词表
 
 BATCH_SIZE=26
 LR=0.001

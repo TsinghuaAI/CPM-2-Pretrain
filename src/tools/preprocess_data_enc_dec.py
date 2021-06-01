@@ -38,6 +38,8 @@ except ImportError:
 from data_utils.tokenization_enc_dec import EncDecTokenizer
 from data import indexed_dataset
 
+# from ray.util.multiprocessing.pool import Pool
+
 random.seed(233)
 np.random.seed(233)
 g = torch.manual_seed(233)
@@ -67,7 +69,7 @@ class Encoder(object):
         data = data.replace("<n>", "\n")
         doc_ids = Encoder.tokenizer.encode(data)
         if len(doc_ids) < 10:
-            return None, None, 0
+            return None, None, None, 0
         doc_ids.append(Encoder.tokenizer.eod_id)
         span_start_ends = self.random_spans_noise_mask(
             len(doc_ids), noisy_density=self.args.noisy_density, mean_noise_span_length=self.args.mean_noise_span_length)
@@ -80,7 +82,19 @@ class Encoder(object):
             noise_tokens.append([0] + doc_ids[span[0]:span[1]]) # "[0]+" placeholder for sentinel
             start = span[1]
 
-        return no_noise_tokens, noise_tokens, len(line)
+        target_offset_map = []
+        target_len = 0
+        for (k, context), target in zip(enumerate(no_noise_tokens), noise_tokens):
+            context[-1] = self.tokenizer.vocab_size + k
+            target[0] = self.tokenizer.vocab_size + k
+            target_offset_map.extend([target_len, len(target)])
+            target_len += len(target)
+
+        no_noise_tokens = [x for y in no_noise_tokens for x in y]
+
+        noise_tokens = [x for y in noise_tokens for x in y]
+
+        return no_noise_tokens, noise_tokens, target_offset_map, len(line)
 
     def random_spans_noise_mask(self, length, noisy_density=0.15, mean_noise_span_length=10.0):
         num_noise_tokens = round(length * noisy_density)
@@ -146,49 +160,45 @@ def main():
 
     encoder = Encoder(args)
     tokenizer = EncDecTokenizer(os.path.join(args.tokenizer_path, 'vocab.txt'))
+    # pool = Pool(args.workers, initializer=encoder.initializer)
     pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
     
     # use the tokenizer to encode the sentences
-    encoded_docs = pool.imap_unordered(encoder.encode, fin, 50)
+    encoded_docs = pool.imap_unordered(encoder.encode, fin, 30)
 
     level = "document"
 
-    #print(f"Vocab size: {tokenizer.vocab_size}")
+    print(f"Vocab size: {tokenizer.vocab_size}")
     print(f"Output prefix: {args.output_prefix}")
     context_bin_file = os.path.join(args.output_path, "{}_{}_context.bin".format(args.output_prefix, level))
     context_idx_file = os.path.join(args.output_path,  "{}_{}_context.idx".format(args.output_prefix, level))
     target_bin_file = os.path.join(args.output_path,  "{}_{}_target.bin".format(args.output_prefix, level))
     target_idx_file = os.path.join(args.output_path,  "{}_{}_target.idx".format(args.output_prefix, level))
+    target_offset_bin_file = os.path.join(args.output_path,  "{}_{}_target_offset.bin".format(args.output_prefix, level))
+    target_offset_idx_file = os.path.join(args.output_path,  "{}_{}_target_offset.idx".format(args.output_prefix, level))
     
+
     # set dtype == int64
     # max idx: 2 ** 63 - 1
-    builder_context = indexed_dataset.make_builder(context_bin_file, impl=args.dataset_impl, dtype=np.int64)
-    builder_target = indexed_dataset.make_builder(target_bin_file, impl=args.dataset_impl, dtype=np.int64)
+    builder_context = indexed_dataset.make_builder(context_bin_file, impl=args.dataset_impl, dtype=np.uint16)
+    builder_target = indexed_dataset.make_builder(target_bin_file, impl=args.dataset_impl, dtype=np.uint16)
+    builder_target_offset = indexed_dataset.make_builder(target_offset_bin_file, impl=args.dataset_impl, dtype=np.uint16)
 
     startup_end = time.time()
     proc_start = time.time()
     total_bytes_processed = 0
     print("Time to startup:", startup_end - startup_start)
 
-    sentinel_idx = tokenizer.vocab_size # start from the last token of the tokenizer
+    # sentinel_idx = tokenizer.vocab_size # start from the last token of the tokenizer
     print("tokenizer vocab size:", tokenizer.vocab_size)
-    for i, (no_noise_tokens, noise_tokens, bytes_processed) in enumerate(encoded_docs, start=1):
+    for i, (no_noise_tokens, noise_tokens, target_offset_map, bytes_processed) in enumerate(encoded_docs, start=1):
         if no_noise_tokens is None or noise_tokens is None:
             continue
         total_bytes_processed += bytes_processed
-        for context, target in zip(no_noise_tokens, noise_tokens):
-            context[-1] = sentinel_idx
-            target[0] = sentinel_idx
-
-            sentinel_idx += 1
-
-            assert sentinel_idx < 2 ** 63 - 1, "sentinel idx too large"
-
-        no_noise_tokens = [x for y in no_noise_tokens for x in y]
 
         builder_context.add_item(torch.IntTensor(no_noise_tokens))
-        for target in noise_tokens:
-            builder_target.add_item(torch.IntTensor(target))
+        builder_target.add_item(torch.IntTensor(noise_tokens))
+        builder_target_offset.add_item(torch.IntTensor(target_offset_map))
         
         if i % args.log_interval == 0:
             current = time.time()
@@ -200,6 +210,7 @@ def main():
 
     builder_context.finalize(context_idx_file)
     builder_target.finalize(target_idx_file)
+    builder_target_offset.finalize(target_offset_idx_file)
 
     pool.close()
 
