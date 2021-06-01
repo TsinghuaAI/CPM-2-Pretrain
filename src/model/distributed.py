@@ -39,7 +39,7 @@ class DistributedDataParallel(Module):
                 self.needs_reduction = False
                 buckets = {}
                 for name, param in self.module.named_parameters():
-                    if param.requires_grad and param.grad is not None:
+                    if param.requires_grad and param.grad is not None and not param.expert:
                         tp = (param.data.type())
                         if tp not in buckets:
                             buckets[tp] = []

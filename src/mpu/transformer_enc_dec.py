@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
+from .baselayer import BaseLayer
 # from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 
 from .initialize import get_model_parallel_world_size
@@ -526,10 +527,12 @@ class ParallelBlock(nn.Module):
                 is_decoder=is_decoder,
                 output_layer_init_method=output_layer_init_method)
 
-        self.ff = ParallelFF(
-            config,
-            init_method,
-            output_layer_init_method=output_layer_init_method)
+        self.ff = BaseLayer(config, ParallelFF, init_method, output_layer_init_method)
+
+        # self.ff = ParallelFF(
+        #     config,
+        #     init_method,
+        #     output_layer_init_method=output_layer_init_method)
 
     def forward(
         self,

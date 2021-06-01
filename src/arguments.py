@@ -122,7 +122,8 @@ def add_training_args(parser: argparse.ArgumentParser):
                        help='report interval')
     group.add_argument('--exit-interval', type=int, default=None,
                        help='Exit the program after this many new iterations.')
-
+    group.add_argument('--gradient-accumulation-steps', type=int, default=1,
+                       help='gradient accumulation steps')
     group.add_argument('--seed', type=int, default=1234,
                        help='random seed')
     # Batch prodecuer arguments

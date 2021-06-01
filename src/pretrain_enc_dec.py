@@ -82,6 +82,13 @@ def get_optimizer(model, args):
     # Build parameter groups (weight decay and non-decay).
     while isinstance(model, (DDP, FP16_Module)):
         model = model.module
+
+    for n, p in model.named_parameters():
+        if 'expert_network' in n and 'layer_norm' not in n:
+            p.expert = True
+        else:
+            p.expert = False
+
     param_groups = enc_dec_get_params_for_weight_decay_optimization(model)
 
     # Add model parallel attribute if it is not set.
@@ -162,7 +169,6 @@ def setup_model_and_optimizer(args, vocab_size):
             dist_init_required=False
         )
 
-    print(args.load)
     if args.load is not None:
         args.iteration = load_checkpoint(model, optimizer, lr_scheduler, args)
     else:
@@ -367,49 +373,24 @@ def backward_step(optimizer, model, lm_loss, args, timers):
     """Backward step."""
     # Total loss.
 
-    loss = lm_loss
+    loss = lm_loss / args.gradient_accumulation_steps
 
     # Backward pass.
-    if args.deepspeed:
-        model.backward(loss)
+    if args.fp16:
+        optimizer.backward(loss, update_master_grads=False)
     else:
-        optimizer.zero_grad()
-        if args.fp16:
-            optimizer.backward(loss, update_master_grads=False)
-        else:
-            loss.backward()
+        loss.backward()
 
     # Reduce across processes.
     lm_loss_reduced = lm_loss
 
     reduced_losses = lm_loss.view(1)
 
-    if args.deepspeed:
-        # DeepSpeed backward propagation already addressed all reduce communication.
-        # Reset the timer to avoid breaking timer logs below.
-        timers('allreduce').reset()
-    else:
-        torch.distributed.all_reduce(reduced_losses.data)
-        reduced_losses.data = reduced_losses.data / args.world_size
-        if not USE_TORCH_DDP:
-            timers('allreduce').start()
-            model.allreduce_params(reduce_after=False,
-                                   fp32_allreduce=args.fp32_allreduce)
-            timers('allreduce').stop()
+    timers('allreduce').reset()
+    torch.distributed.all_reduce(reduced_losses.data)
+    reduced_losses.data = reduced_losses.data / args.world_size
 
     lm_loss_reduced = reduced_losses
-
-    # Update master gradients.
-    if not args.deepspeed:
-        if args.fp16:
-            optimizer.update_master_grads()
-
-        # Clipping gradients helps prevent the exploding gradient.
-        if args.clip_grad > 0:
-            if not args.fp16:
-                mpu.clip_grad_norm(model.parameters(), args.clip_grad)
-            else:
-                optimizer.clip_master_grads(args.clip_grad)
 
     return lm_loss_reduced
 
@@ -429,7 +410,7 @@ def see_memory_usage(message, force=False):
 
 
 def train_step(tokenizer, data_iterator, model, optimizer, lr_scheduler,
-               args, timers):
+               args, timers, total_step):
     """Single training step."""
 
     lm_loss = forward_step(tokenizer, data_iterator, model, args, timers)
@@ -443,13 +424,20 @@ def train_step(tokenizer, data_iterator, model, optimizer, lr_scheduler,
     if args.deepspeed:
         model.step()
     else:
-        optimizer.step()
+        if total_step % args.gradient_accumulation_steps == 0:
+            model.allreduce_params(reduce_after=False,
+                                    fp32_allreduce=args.fp32_allreduce)
+            optimizer.update_master_grads()
+            optimizer.clip_master_grads(args.clip_grad)
+            
+            optimizer.step()
+            optimizer.zero_grad()
 
-        # Update learning rate.
-        if not (args.fp16 and optimizer.overflow):
-            lr_scheduler.step()
-        else:
-            skipped_iter = 1
+            # Update learning rate.
+            if not (args.fp16 and optimizer.overflow):
+                lr_scheduler.step()
+            else:
+                skipped_iter = 1
 
     return lm_loss_reduced, skipped_iter
 
@@ -467,22 +455,26 @@ def train(tokenizer, model, optimizer, lr_scheduler,
     # Iterations.
     skipped_iters = 0
 
+    total_step = 0
+
     timers('interval time').start()
     report_memory_flag = True
     for iteration in tqdm(range(args.iteration, args.train_iters), disable=(torch.distributed.get_rank() != 0), desc="Pretaining"):
+
+        total_step += 1
 
         lm_loss, skipped_iter = train_step(tokenizer, train_data_iterator,
                                            model,
                                            optimizer,
                                            lr_scheduler,
-                                           args, timers)
+                                           args, timers, total_step)
         skipped_iters += skipped_iter
 
         # Update losses.
         total_lm_loss += lm_loss.data.detach().float()
 
         # Logging.
-        if iteration % args.log_interval == 0:
+        if iteration % args.log_interval == 0 and iteration != 0:
             learning_rate = optimizer.param_groups[0]['lr']
             avg_lm_loss = total_lm_loss.item() / args.log_interval
             elapsed_time = timers('interval time').elapsed()
@@ -673,11 +665,6 @@ def main():
 
     # setup tokenizer
     tokenizer = EncDecTokenizer(os.path.join(args.tokenizer_path, 'vocab.txt'))
-    
-    with open(args.deepspeed_config, "r") as f:
-        ds_config = json.load(f)
-
-    args.gradient_accumulation_steps = ds_config["gradient_accumulation_steps"]
 
     # Model, optimizer, and learning rate.
     model, optimizer, lr_scheduler = setup_model_and_optimizer(args, tokenizer.vocab_size)
