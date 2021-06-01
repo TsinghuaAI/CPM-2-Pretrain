@@ -21,7 +21,6 @@ import token
 
 import numpy as np
 import torch
-from data_utils.tokenization_enc_dec import EncDecTokenizer
 
 from utils import print_rank_0
 import mpu
@@ -129,7 +128,7 @@ def get_indexed_dataset_(data_prefix, data_impl, skip_warmup):
 
 class EncDecDataset(torch.utils.data.Dataset):
 
-    def __init__(self, tokenizer: EncDecTokenizer, name, data_prefix, documents, context_indexed_dataset: MMapIndexedDataset,
+    def __init__(self, tokenizer, name, data_prefix, documents, context_indexed_dataset: MMapIndexedDataset,
                 target_indexed_dataset: MMapIndexedDataset, target_offset_dataset: MMapIndexedDataset, num_samples, enc_seq_length, dec_seq_length, seed):
 
         self.name = name
