@@ -10,7 +10,7 @@ CPM-2技术报告请参考[link](https://github.com/TsinghuaAI/tsinghuaai.github
 请在智源资源[下载页面](https://resource.wudaoai.cn/home?ind=2&name=WuDao%20WenYuan&id=1394901846484627456)进行申请，文件介绍如下：
 
 | 文件名 | 描述 | 参数大小 |
-| :-----| ----: | :----: |
+| :-----| :----: | :----: |
 | 100000.tar | 纯中文模型 | 110亿 |
 | 36000.tar | 中英文双语模型 | 110亿 |
 | 300000.tar | 中英文MoE模型 | 1980亿 |
