@@ -115,7 +115,18 @@ class WordpieceTokenizer(object):
 
         return sub_tokens
 
-
+def Q2B(uchar):
+    if uchar in ['，', '。', '！', '（', '）', '？', '、', '；', '：']:
+        return uchar
+    inside_code = ord(uchar)
+    if inside_code == 0x3000:
+        inside_code = 0x0020
+    else:
+        inside_code -= 0xfee0
+    if inside_code < 0x0020 or inside_code > 0x7e: 
+        return uchar
+    return chr(inside_code)
+      
 class EncDecTokenizer(object):
 
     def __init__(self, vocab_file, max_len=None, max_sentinels=190):
@@ -177,6 +188,7 @@ class EncDecTokenizer(object):
         return output_tokens
 
     def encode(self, text):
+        text = ''.join([Q2B(x) for x in text])
         output_tokens = [self.encoder[x] for x in self.tokenize(text)]
 
         # filter space
