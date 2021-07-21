@@ -22,6 +22,12 @@ CPM-2技术报告请参考[link](https://arxiv.org/abs/2106.10715)。
 docker pull gyxthu17/cpm-2:1.0
 ```
 
+由于运行环境都已在 Docker 中配置好，因此不需要设置额外的环境变量。运行前需要将本目录挂载到 Docker 中，例如将本目录挂载到 Docker 中的 /mnt，可以使用以下命令运行 Docker 环境：
+```[bash]
+docker run -ti -v ${PWD}:/mnt gyxthu17/cpm-2:1.0 /bin/bash
+```
+Docker 启动之后在 /mnt 下操作即可。
+
 ## 2 数据
 `scripts/gen_data.sh` 中给出了生成数据文件的脚本示例。该脚本将一个多行的纯文本文件（一个 document 一行）转化为二进制文件（会输出三个 .bin 和三个 .idx 文件），方便模型读取。
 

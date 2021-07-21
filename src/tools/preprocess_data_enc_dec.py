@@ -35,7 +35,7 @@ try:
 except ImportError:
     nltk_available = False
 
-from data_utils.tokenization_enc_dec import EncDecTokenizer
+from tokenization_enc_dec import EncDecTokenizer
 from data import indexed_dataset
 
 # from ray.util.multiprocessing.pool import Pool
