@@ -19,12 +19,12 @@ CPM-2技术报告请参考[link](https://arxiv.org/abs/2106.10715)。
 可以直接拉取我们提供的 Docker 环境：
 
 ```[bash]
-docker pull gyxthu17/cpm-2:1.0
+docker pull gyxthu17/cpm-2:1.1
 ```
 
 由于运行环境都已在 Docker 中配置好，因此不需要设置额外的环境变量。运行前需要将本目录挂载到 Docker 中，例如将本目录挂载到 Docker 中的 /mnt，可以使用以下命令运行 Docker 环境：
 ```[bash]
-docker run -ti -v ${PWD}:/mnt gyxthu17/cpm-2:1.0 /bin/bash
+docker run -ti -v ${PWD}:/mnt gyxthu17/cpm-2:1.1 /bin/bash
 ```
 Docker 启动之后在 /mnt 下操作即可。
 
