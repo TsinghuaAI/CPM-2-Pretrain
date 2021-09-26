@@ -5,6 +5,8 @@ Pre-train CPM-2
 
 CPM-2技术报告请参考[link](https://arxiv.org/abs/2106.10715)。
 
+**若您想使用CPM-2进行推理，我们建议使用高效推理工具[BMInf](https://github.com/OpenBMB/BMInf)，支持1060以上显卡单卡推理。**
+
 ## 0 模型下载
 
 请在智源资源[下载页面](https://resource.wudaoai.cn/home?ind=2&name=WuDao%20WenYuan&id=1394901846484627456)进行申请，文件介绍如下：
